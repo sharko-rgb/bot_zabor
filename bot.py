@@ -5,8 +5,8 @@ import aiosqlite
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 from vk_api import VkApi
@@ -132,7 +132,7 @@ def parse_fence_choice(text):
 
 async def save_application(name, phone, address):
     async with aiosqlite.connect("zabory72.db") as db:
-        await db.execute("""
+        await db.execute(""" 
             CREATE TABLE IF NOT EXISTS applications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT,
@@ -147,7 +147,7 @@ async def save_application(name, phone, address):
         )
         await db.commit()
 
-# ==== Telegram Handlers ====
+# ==== Telegram Handlers ==== 
 
 @dp.message_handler(commands=["start", "help"])
 async def tg_start(message: types.Message):
@@ -235,33 +235,7 @@ async def tg_process_address(message: types.Message, state: FSMContext):
     await message.answer("Спасибо! Ваша заявка принята. Наши специалисты свяжутся с Вами в ближайшее время.", reply_markup=create_telegram_main_menu())
     await state.finish()
 
-@dp.message_handler(lambda message: message.text == "4. Посмотреть примеры наших работ")
-async def tg_show_examples(message: types.Message):
-    await message.answer("Примеры наших работ можно посмотреть в нашей группе ВКонтакте:\nhttps://vk.com/yourgroup", reply_markup=create_telegram_main_menu())
-
-@dp.message_handler(lambda message: message.text == "5. Задать вопрос специалисту")
-async def tg_ask_specialist(message: types.Message):
-    await message.answer("Пожалуйста, напишите ваш вопрос, и мы передадим его специалисту. Также можно связаться по телефону.", reply_markup=create_telegram_main_menu())
-
-@dp.message_handler(lambda message: message.text == "6. Контакты")
-async def tg_contacts(message: types.Message):
-    await message.answer(
-        "Контакты компании Zabory72.ru:\n"
-        "Телефон: +7 (XXX) XXX-XX-XX\n"
-        "Email: info@zabory72.ru\n"
-        "Адрес: г. Ваш город, ул. Примерная, д.1",
-        reply_markup=create_telegram_main_menu()
-    )
-
-# ==== VK Handler ====
-
-STATE_MAIN = "MAIN"
-STATE_CHOOSE_FENCE = "CHOOSE_FENCE"
-STATE_CALC_FENCE_TYPE = "CALC_FENCE_TYPE"
-STATE_CALC_FENCE_HEIGHT = "CALC_FENCE_HEIGHT"
-STATE_APP_NAME = "APP_NAME"
-STATE_APP_PHONE = "APP_PHONE"
-STATE_APP_ADDRESS = "APP_ADDRESS"
+# ==== VK Handler ==== 
 
 async def vk_handler():
     print("VK bot started...")
