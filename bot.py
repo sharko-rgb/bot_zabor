@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sqlite3
 from telegram import (Update, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto)
