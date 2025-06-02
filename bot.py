@@ -37,7 +37,7 @@ COST_TABLE = {
 
 bot = Bot(token=TELEGRAM_TOKEN)
 storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
+dp = Dispatcher(storage=storage)  # Исправленное создание Dispatcher
 
 class TgForm(StatesGroup):
     fence_type = State()
