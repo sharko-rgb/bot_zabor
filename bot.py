@@ -1,6 +1,5 @@
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
-from aiogram.filters.callback_query import CallbackQueryData
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.enums import ParseMode
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -8,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
 import asyncio
+
 
 API_TOKEN = "7853853505:AAEhTPDeWUlX67naGu5JhW9-maep1yesUD0"
 ADMIN_ID = 1346038165  # твой ID телеграм
