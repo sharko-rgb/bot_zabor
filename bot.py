@@ -35,6 +35,7 @@ COST_TABLE = {
 }
 
 # ==== Telegram ====
+
 bot = Bot(token=TELEGRAM_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
@@ -47,6 +48,7 @@ class TgForm(StatesGroup):
     address = State()
 
 # ==== VK ====
+
 vk_session = VkApi(token=VK_GROUP_TOKEN)
 vk = vk_session.get_api()
 longpoll = VkBotLongPoll(vk_session, VK_GROUP_ID)
@@ -55,8 +57,9 @@ vk_user_states = {}
 vk_user_data = {}
 
 # --- Общие функции ---
+
 def create_telegram_main_menu():
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard = types.ReplyKeyboardMarkup(keyboard=[], resize_keyboard=True)
     keyboard.add(
         "1. Выбрать тип забора",
         "2. Рассчитать стоимость",
@@ -68,14 +71,14 @@ def create_telegram_main_menu():
     return keyboard
 
 def create_telegram_fence_menu():
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    keyboard = types.ReplyKeyboardMarkup(keyboard=[], resize_keyboard=True, row_width=2)
     for i in range(1, 11):
         keyboard.insert(f"{i}. {COST_TABLE[i]['name']}")
     keyboard.add("Назад")
     return keyboard
 
 def create_telegram_height_menu():
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard = types.ReplyKeyboardMarkup(keyboard=[], resize_keyboard=True)
     keyboard.add("1.8 м", "2.0 м")
     keyboard.add("Отмена")
     return keyboard
@@ -146,6 +149,7 @@ async def save_application(name, phone, address):
         await db.commit()
 
 # ==== Telegram Handlers ==== 
+
 async def tg_start(message: types.Message):
     await message.answer(
         "Здравствуйте! Вы обратились в компанию Zabory72.ru, супермаркет металлических заборов.",
@@ -178,7 +182,7 @@ async def tg_process_fence_type(message: types.Message, state: FSMContext):
 async def tg_process_height(message: types.Message, state: FSMContext):
     if message.text == "Отмена":
         await message.answer("Отмена расчёта стоимости.", reply_markup=create_telegram_main_menu())
-        await state.clear()
+        await state.finish()
         return
     if message.text not in ["1.8 м", "2.0 м"]:
         await message.answer("Пожалуйста, выберите высоту из меню.")
@@ -196,29 +200,68 @@ async def tg_process_height(message: types.Message, state: FSMContext):
         await message.answer(f"Примерная стоимость за метр погонный для {name} высотой {height} м: {price} руб.")
 
     await message.answer("Если хотите, можете оставить заявку на бесплатный замер через пункт меню '3. Оставить заявку на бесплатный замер'.", reply_markup=create_telegram_main_menu())
-    await state.clear()
+    await state.finish()
 
-# === Регистрация обработчиков ===
+# === Регистрация обработчиков с фильтрами ===
+
 dp.message.register(tg_start, Command(commands=["start", "help"]))
-dp.message.register(tg_choose_fence, lambda m: m.text == "1. Выбрать тип забора")
-dp.message.register(tg_back_main, lambda m: m.text == "Назад")
-dp.message.register(tg_start_cost_calc, lambda m: m.text == "2. Рассчитать стоимость")
+dp.message.register(tg_choose_fence, lambda message: message.text == "1. Выбрать тип забора")
+dp.message.register(tg_back_main, lambda message: message.text == "Назад")
+dp.message.register(tg_start_cost_calc, lambda message: message.text == "2. Рассчитать стоимость")
 dp.message.register(tg_process_fence_type, TgForm.fence_type)
 dp.message.register(tg_process_height, TgForm.fence_height)
 
-# === VK заглушка (реализуй по необходимости) ===
+# ==== VK Handler (пример) ====
+
 async def vk_handler():
-    while True:
-        await asyncio.sleep(5)
+    for event in longpoll.listen():
+        if event.type == VkBotEventType.MESSAGE_NEW:
+            user_id = event.obj.message['from_id']
+            text = event.obj.message['text']
 
-# === Запуск бота ===
+            if user_id not in vk_user_states:
+                vk_user_states[user_id] = None
+                vk_user_data[user_id] = {}
+
+            state = vk_user_states[user_id]
+
+            # Пример простой логики VK бота (можно расширять)
+            if text == "1" or text.startswith("1."):
+                await send_vk_message(user_id, "Вы выбрали тип забора. (Логика тут)", keyboard=create_vk_fence_keyboard())
+                vk_user_states[user_id] = "fence_type"
+            elif state == "fence_type":
+                choice = parse_fence_choice(text)
+                if choice:
+                    vk_user_data[user_id]["fence_type"] = choice
+                    await send_vk_message(user_id, "Выберите высоту забора:", keyboard=create_vk_height_keyboard())
+                    vk_user_states[user_id] = "fence_height"
+                else:
+                    await send_vk_message(user_id, "Пожалуйста, выберите из списка.")
+            elif state == "fence_height":
+                if text in ["1.8 м", "2.0 м"]:
+                    fence_type = vk_user_data[user_id].get("fence_type")
+                    height = float(text.split()[0])
+                    price = COST_TABLE[fence_type].get(height)
+                    name = COST_TABLE[fence_type]["name"]
+                    if price is None:
+                        await send_vk_message(user_id, f"Для {name} высотой {height} м цена отсутствует.")
+                    else:
+                        await send_vk_message(user_id, f"Примерная стоимость за метр погонный для {name} высотой {height} м: {price} руб.")
+                    vk_user_states[user_id] = None
+                    vk_user_data[user_id] = {}
+                else:
+                    await send_vk_message(user_id, "Пожалуйста, выберите высоту из меню.")
+            else:
+                # Главное меню
+                keyboard = create_vk_main_keyboard()
+                await send_vk_message(user_id, "Здравствуйте! Выберите пункт меню:", keyboard=keyboard)
+
+# ==== Запуск ====
+
 async def main():
-    # Удаляем Webhook, если активен (TelegramConflictError fix)
-    await bot.delete_webhook(drop_pending_updates=True)
-
-    tg_task = asyncio.create_task(dp.start_polling(bot))
-    vk_task = asyncio.create_task(vk_handler())  # позже можно заменить на реальную реализацию
-    await asyncio.gather(tg_task, vk_task)
+    task_vk = asyncio.create_task(vk_handler())
+    # Запуск Telegram polling
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
