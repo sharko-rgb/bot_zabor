@@ -7,6 +7,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import Command
 
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 from vk_api import VkApi
@@ -201,8 +202,9 @@ async def tg_process_height(message: types.Message, state: FSMContext):
     await message.answer("Если хотите, можете оставить заявку на бесплатный замер через пункт меню '3. Оставить заявку на бесплатный замер'.", reply_markup=create_telegram_main_menu())
     await state.finish()
 
-# Регистрация обработчиков для команд с использованием register
-dp.message.register(tg_start, commands=["start", "help"])
+# === Регистрация обработчиков с фильтрами ===
+
+dp.message.register(tg_start, Command(commands=["start", "help"]))
 dp.message.register(tg_choose_fence, lambda message: message.text == "1. Выбрать тип забора")
 dp.message.register(tg_back_main, lambda message: message.text == "Назад")
 
