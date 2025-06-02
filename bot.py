@@ -16,7 +16,7 @@ from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 logging.basicConfig(level=logging.INFO)
 
 # --- Конфигурация ---
-TELEGRAM_TOKEN = "7731731504:AAHCy1Ipl61-CxI7Tvni4z9dWCUcYWbT650"
+TELEGRAM_TOKEN = "7853853505:AAEhTPDeWUlX67naGu5JhW9-maep1yesUD0"
 VK_GROUP_TOKEN = "vk1.a.fIwIo0GT7PD42VeV_E9i8pItr2LYeC7BxPvzp1nCQ6W2FDbrk-xAyLOKmwVRkycx5SOwjGL2vRYonLZ_PR-6sbvX2JU3y3Gz2GpiuxamRpNllx8-uO9B36WpN73jRxVabbNi5ku7R1e_uWnnS6fAjQXF5MWGgutORxrNKO3hyTgrQHS4jYHSO9xgq1l6h-gd0oAczgUmEaHno35FJlV0Ew"
 VK_GROUP_ID = 80211925  # например 123456789
 
