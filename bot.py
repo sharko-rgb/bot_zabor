@@ -163,11 +163,13 @@ async def main():
     await app.run_polling()
 
 if __name__ == '__main__':
-    import sys
-    if sys.platform.startswith('win'):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    import asyncio
+
+    try:
+        asyncio.get_event_loop().run_until_complete(main())
+    except (KeyboardInterrupt, SystemExit):
+        print("Bot stopped.")
+
 
 
 
