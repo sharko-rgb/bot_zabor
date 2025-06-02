@@ -15,7 +15,7 @@ from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 logging.basicConfig(level=logging.INFO)
 
 # --- Конфигурация ---
-TELEGRAM_TOKEN = "ВАШ_TELEGRAM_BOT_TOKEN"
+TELEGRAM_TOKEN = "7731731504:AAHCy1Ipl61-CxI7Tvni4z9dWCUcYWbT650"
 VK_GROUP_TOKEN = "ВАШ_VK_GROUP_TOKEN"
 VK_GROUP_ID = ВАШ_VK_GROUP_ID  # например 123456789
 
