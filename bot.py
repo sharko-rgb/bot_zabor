@@ -201,17 +201,10 @@ async def tg_process_height(message: types.Message, state: FSMContext):
     await message.answer("Если хотите, можете оставить заявку на бесплатный замер через пункт меню '3. Оставить заявку на бесплатный замер'.", reply_markup=create_telegram_main_menu())
     await state.finish()
 
-@dp.message.register(commands=["start", "help"])
-async def tg_start(message: types.Message):
-    await tg_start(message)
-
-@dp.message.register(lambda message: message.text == "1. Выбрать тип забора")
-async def tg_choose_fence(message: types.Message):
-    await tg_choose_fence(message)
-
-@dp.message.register(lambda message: message.text == "Назад")
-async def tg_back_main(message: types.Message):
-    await tg_back_main(message)
+# Регистрация обработчиков для команд с использованием register
+dp.message.register(tg_start, commands=["start", "help"])
+dp.message.register(tg_choose_fence, lambda message: message.text == "1. Выбрать тип забора")
+dp.message.register(tg_back_main, lambda message: message.text == "Назад")
 
 # === Запуск бота ===
 
