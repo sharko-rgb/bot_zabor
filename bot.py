@@ -37,7 +37,7 @@ COST_TABLE = {
 
 bot = Bot(token=TELEGRAM_TOKEN)
 storage = MemoryStorage()
-dp = Dispatcher(storage=storage)  # Исправленное создание Dispatcher
+dp = Dispatcher(storage=storage)
 
 class TgForm(StatesGroup):
     fence_type = State()
@@ -149,31 +149,25 @@ async def save_application(name, phone, address):
 
 # ==== Telegram Handlers ==== 
 
-@dp.message_handler(commands=["start", "help"])
 async def tg_start(message: types.Message):
     await message.answer(
         "Здравствуйте! Вы обратились в компанию Zabory72.ru, супермаркет металлических заборов.",
         reply_markup=create_telegram_main_menu()
     )
 
-@dp.message_handler(lambda message: message.text == "1. Выбрать тип забора")
 async def tg_choose_fence(message: types.Message):
     await message.answer("Выберите тип забора:", reply_markup=create_telegram_fence_menu())
 
-@dp.message_handler(lambda message: message.text == "Назад")
 async def tg_back_main(message: types.Message):
     await message.answer("Возвращаемся в главное меню.", reply_markup=create_telegram_main_menu())
 
-@dp.message_handler(lambda message: message.text and message.text[0].isdigit() and int(message.text[0]) in range(1,11))
 async def tg_fence_selected(message: types.Message):
     await message.answer(f"Вы выбрали: {message.text}\nЕсли хотите рассчитать стоимость, выберите пункт меню '2. Рассчитать стоимость'.")
 
-@dp.message_handler(lambda message: message.text == "2. Рассчитать стоимость")
 async def tg_start_cost_calc(message: types.Message):
     await message.answer("Выберите тип забора для расчета стоимости:", reply_markup=create_telegram_fence_menu())
     await TgForm.fence_type.set()
 
-@dp.message_handler(state=TgForm.fence_type)
 async def tg_process_fence_type(message: types.Message, state: FSMContext):
     text = message.text
     for k, v in COST_TABLE.items():
@@ -184,7 +178,6 @@ async def tg_process_fence_type(message: types.Message, state: FSMContext):
             return
     await message.answer("Пожалуйста, выберите тип забора из меню.")
 
-@dp.message_handler(state=TgForm.fence_height)
 async def tg_process_height(message: types.Message, state: FSMContext):
     if message.text == "Отмена":
         await message.answer("Отмена расчёта стоимости.", reply_markup=create_telegram_main_menu())
@@ -208,145 +201,19 @@ async def tg_process_height(message: types.Message, state: FSMContext):
     await message.answer("Если хотите, можете оставить заявку на бесплатный замер через пункт меню '3. Оставить заявку на бесплатный замер'.", reply_markup=create_telegram_main_menu())
     await state.finish()
 
-@dp.message_handler(lambda message: message.text == "3. Оставить заявку на бесплатный замер")
-async def tg_start_application(message: types.Message):
-    await message.answer("Пожалуйста, укажите Ваше имя:")
-    await TgForm.name.set()
+@dp.message.register(commands=["start", "help"])
+async def tg_start(message: types.Message):
+    await tg_start(message)
 
-@dp.message_handler(state=TgForm.name)
-async def tg_process_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text)
-    await message.answer("Введите ваш телефон:")
-    await TgForm.next()
+@dp.message.register(lambda message: message.text == "1. Выбрать тип забора")
+async def tg_choose_fence(message: types.Message):
+    await tg_choose_fence(message)
 
-@dp.message_handler(state=TgForm.phone)
-async def tg_process_phone(message: types.Message, state: FSMContext):
-    await state.update_data(phone=message.text)
-    await message.answer("Введите адрес объекта:")
-    await TgForm.next()
+@dp.message.register(lambda message: message.text == "Назад")
+async def tg_back_main(message: types.Message):
+    await tg_back_main(message)
 
-@dp.message_handler(state=TgForm.address)
-async def tg_process_address(message: types.Message, state: FSMContext):
-    await state.update_data(address=message.text)
-    data = await state.get_data()
-
-    await save_application(data['name'], data['phone'], data['address'])
-
-    await message.answer("Спасибо! Ваша заявка принята. Наши специалисты свяжутся с Вами в ближайшее время.", reply_markup=create_telegram_main_menu())
-    await state.finish()
-
-# ==== VK Handler ==== 
-
-async def vk_handler():
-    print("VK bot started...")
-    async with aiosqlite.connect("zabory72.db") as db:
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS applications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
-                phone TEXT,
-                address TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        await db.commit()
-
-    for event in longpoll.listen():
-        if event.type == VkBotEventType.MESSAGE_NEW:
-            user_id = event.object.message['from_id']
-            text = event.object.message['text'].strip().lower()
-            state = vk_user_states.get(user_id, STATE_MAIN)
-
-            if state == STATE_MAIN:
-                if text in ["начать", "старт", "привет"]:
-                    await send_vk_message(user_id, "Здравствуйте! Вы в меню компании Zabory72.ru.", create_vk_main_keyboard())
-                elif text.startswith("1"):
-                    vk_user_states[user_id] = STATE_CHOOSE_FENCE
-                    await send_vk_message(user_id, "Выберите тип забора:", create_vk_fence_keyboard())
-                elif text.startswith("2"):
-                    vk_user_states[user_id] = STATE_CALC_FENCE_TYPE
-                    await send_vk_message(user_id, "Выберите тип забора для расчёта стоимости:", create_vk_fence_keyboard())
-                elif text.startswith("3"):
-                    vk_user_states[user_id] = STATE_APP_NAME
-                    await send_vk_message(user_id, "Пожалуйста, введите Ваше имя:")
-                elif text.startswith("4"):
-                    await send_vk_message(user_id, "Примеры наших работ смотрите в группе: https://vk.com/yourgroup", create_vk_main_keyboard())
-                elif text.startswith("5"):
-                    await send_vk_message(user_id, "Напишите ваш вопрос, и мы передадим его специалисту.", create_vk_main_keyboard())
-                elif text.startswith("6"):
-                    await send_vk_message(user_id, "Контакты:\nТелефон: +7 (XXX) XXX-XX-XX\nEmail: info@zabory72.ru\nАдрес: г. Ваш город", create_vk_main_keyboard())
-                else:
-                    await send_vk_message(user_id, "Пожалуйста, выберите пункт меню от 1 до 6 или напишите 'Начать'.", create_vk_main_keyboard())
-
-            elif state == STATE_CHOOSE_FENCE:
-                if text == "назад":
-                    vk_user_states[user_id] = STATE_MAIN
-                    await send_vk_message(user_id, "Возвращаемся в главное меню.", create_vk_main_keyboard())
-                else:
-                    choice = parse_fence_choice(text)
-                    if choice:
-                        name = COST_TABLE[choice]["name"]
-                        await send_vk_message(user_id, f"Вы выбрали: {name}\nДля расчёта стоимости выберите пункт меню '2. Рассчитать стоимость'.")
-                    else:
-                        await send_vk_message(user_id, "Пожалуйста, выберите корректный тип забора из меню.", create_vk_fence_keyboard())
-
-            elif state == STATE_CALC_FENCE_TYPE:
-                if text == "назад":
-                    vk_user_states[user_id] = STATE_MAIN
-                    await send_vk_message(user_id, "Возвращаемся в главное меню.", create_vk_main_keyboard())
-                else:
-                    choice = parse_fence_choice(text)
-                    if choice:
-                        vk_user_data[user_id] = {"fence_type": choice}
-                        vk_user_states[user_id] = STATE_CALC_FENCE_HEIGHT
-                        await send_vk_message(user_id, "Выберите высоту забора:", create_vk_height_keyboard())
-                    else:
-                        await send_vk_message(user_id, "Пожалуйста, выберите корректный тип забора из меню.", create_vk_fence_keyboard())
-
-            elif state == STATE_CALC_FENCE_HEIGHT:
-                if text == "отмена":
-                    vk_user_states[user_id] = STATE_MAIN
-                    vk_user_data.pop(user_id, None)
-                    await send_vk_message(user_id, "Отмена расчёта стоимости.", create_vk_main_keyboard())
-                elif text in ["1.8 м", "2.0 м"]:
-                    height = float(text.split()[0])
-                    choice = vk_user_data.get(user_id, {}).get("fence_type")
-                    if choice:
-                        price = COST_TABLE[choice].get(height)
-                        name = COST_TABLE[choice]["name"]
-                        if price is None:
-                            await send_vk_message(user_id, f"Для {name} высота {height} м цена не указана.")
-                        else:
-                            await send_vk_message(user_id, f"Примерная стоимость за метр погонный для {name} высотой {height} м: {price} руб.")
-                        vk_user_states[user_id] = STATE_MAIN
-                        vk_user_data.pop(user_id, None)
-                        await send_vk_message(user_id, "Главное меню:", create_vk_main_keyboard())
-                    else:
-                        await send_vk_message(user_id, "Ошибка выбора типа забора, попробуйте заново.", create_vk_main_keyboard())
-                        vk_user_states[user_id] = STATE_MAIN
-                        vk_user_data.pop(user_id, None)
-                else:
-                    await send_vk_message(user_id, "Пожалуйста, выберите высоту из меню.", create_vk_height_keyboard())
-
-            elif state == STATE_APP_NAME:
-                vk_user_data[user_id] = {"name": text}
-                vk_user_states[user_id] = STATE_APP_PHONE
-                await send_vk_message(user_id, "Введите ваш телефон:")
-
-            elif state == STATE_APP_PHONE:
-                vk_user_data[user_id]["phone"] = text
-                vk_user_states[user_id] = STATE_APP_ADDRESS
-                await send_vk_message(user_id, "Введите адрес объекта:")
-
-            elif state == STATE_APP_ADDRESS:
-                vk_user_data[user_id]["address"] = text
-                data = vk_user_data[user_id]
-                await save_application(data["name"], data["phone"], data["address"])
-                await send_vk_message(user_id, f"Спасибо, {data['name']}! Ваша заявка принята. Мы свяжемся с вами в ближайшее время.", create_vk_main_keyboard())
-                vk_user_states[user_id] = STATE_MAIN
-                vk_user_data.pop(user_id, None)
-
-# ====== MAIN ======
+# === Запуск бота ===
 
 async def main():
     tg_task = asyncio.create_task(dp.start_polling())
