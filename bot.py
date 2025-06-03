@@ -1,23 +1,27 @@
-import logging
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputFile, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, ConversationHandler, CallbackQueryHandler, filters
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
+)
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler,
+    ConversationHandler, MessageHandler, filters
+)
 
-logging.basicConfig(level=logging.INFO)
+TG_ADMIN_ID = 1346038165  # <-- Замените на ID администратора
 
-TG_ADMIN_ID = 1346038165  # Замените на реальный Telegram ID администратора
+# Состояния ConversationHandler
+(
+    MAIN_MENU,
+    SELECT_FENCE_TYPE,
+    DETAIL_OR_PRICE,
+    CALC_LENGTH,
+    CALC_HEIGHT,
+    CALC_GATE,
+    CONTACTS,
+    WAITING_CONTACT,
+    QUESTION_SPECIALIST
+) = range(9)
 
-menu_buttons = [[
-    "🔩 Выбрать тип забора",
-    "💰 Рассчитать стоимость"
-], [
-    "📐 Оставить заявку на бесплатный замер",
-    "🖼 Посмотреть примеры работ"
-], [
-    "❓ Задать вопрос специалисту",
-    "📞 Контакты"
-]]
-
-fence_types = [
+FENCE_TYPES = [
     "Забор из профнастила",
     "Забор «профлист в рамке»",
     "Евроштакетник вертикально",
@@ -31,7 +35,7 @@ fence_types = [
     "Навесы для автомобиля"
 ]
 
-price_table = {
+PRICES = {
     "Забор из профнастила": {"1.8": 3474, "2.0": 3650},
     "Забор «профлист в рамке»": {"1.8": 6140, "2.0": 6500},
     "Евроштакетник вертикально": {"1.8": 7620, "2.0": 8260},
@@ -40,161 +44,306 @@ price_table = {
     "Забор Ранчо (двойной)": {"1.8": 14500},
     "Забор Ранчо (одинарный)": {"1.8": 11000},
     "Забор из 3Д сетки": {"1.8": 3100},
-    "Ворота откатные": {"1.8": 87000},
-    "Ворота распашные + Калитка": {"1.8": 37000},
-    "Навесы для автомобиля": {"1.8": 7500}
+    "Ворота откатные": {"1.8": 87000, "2.0": 87000},
+    "Ворота распашные + Калитка": {"1.8": 37000, "2.0": 37000},
+    "Навесы для автомобиля": {}  # Цена по кв.м, рассчёт индивидуально
 }
 
+GATE_PRICES = {
+    "Ворота": 87000,
+    "Калитка": 37000,
+    "Оба": 87000 + 37000,
+    "Не нужно": 0
+}
+
+FENCE_DESCRIPTIONS = {
+    "Забор из профнастила": "Прочный и долговечный забор из профилированного листа.",
+    "Забор «профлист в рамке»": "Профлист, установленный в металлическую рамку для прочности.",
+    "Евроштакетник вертикально": "Металлический евроштакетник, установленный вертикально в два ряда.",
+    "Евроштакетник горизонтально": "Металлический евроштакетник, установленный горизонтально в два ряда.",
+    "Забор Жалюзи": "Забор из металлических ламелей с двухсторонней полимерной окраской.",
+    "Забор Ранчо (двойной)": "Двойной металлический забор Ранчо с возможностью комбинировать цвета.",
+    "Забор Ранчо (одинарный)": "Одинарный забор Ранчо с двухсторонней полимерной окраской.",
+    "Забор из 3Д сетки": "Прозрачный забор из 3D-сетки.",
+    "Ворота откатные": "Откатные ворота из трубы проф.60х40 с фурнитурой Алютех.",
+    "Ворота распашные + Калитка": "Распашные ворота с калиткой.",
+    "Навесы для автомобиля": "Навесы с разными типами крыш — радиусные, односкатные, плоские."
+}
+
+# Начало работы, приветствие и главное меню
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Здравствуйте! Вы обратились в компанию Zabory72.ru — супермаркет металлических заборов под ключ, в том числе каменных, из кирпича и керамзитоблоков. Также мы строим металлические навесы для автомобилей.\n\nЧем можем помочь?",
-        reply_markup=ReplyKeyboardMarkup(menu_buttons, resize_keyboard=True)
+    text = (
+        "Здравствуйте, Вы обратились в компанию Zabory72.ru, супермаркет металлических заборов «под ключ», "
+        "в том числе каменных, из кирпича и керамзитоблоков, также мы строим металлические навесы для автомобилей.\n\n"
+        "Выберите пункт меню:"
     )
+    keyboard = [
+        ["1. Выбрать тип забора"],
+        ["2. Рассчитать стоимость"],
+        ["3. Оставить заявку на бесплатный замер"],
+        ["4. Посмотреть примеры наших работ"],
+        ["5. Задать вопрос специалисту"],
+        ["6. Контакты"]
+    ]
+    await update.message.reply_text(text, reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True))
+    return MAIN_MENU
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Обработка главного меню
+async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-    if text == "🔩 Выбрать тип забора":
-        keyboard = [[KeyboardButton(ftype)] for ftype in fence_types]
-        await update.message.reply_text("Какой тип забора Вас интересует?", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-        return 20
-    elif text == "💰 Рассчитать стоимость":
-        await update.message.reply_text("Введите протяжённость забора (в метрах):")
-        return 30
-    elif text == "📐 Оставить заявку на бесплатный замер":
-        await update.message.reply_text("Введите ваше имя:")
-        return 1
-    elif text == "❓ Задать вопрос специалисту":
-        await update.message.reply_text("Пожалуйста, напишите ваш вопрос:")
-        return 10
-    elif text == "🖼 Посмотреть примеры работ":
-        await update.message.reply_photo(photo=InputFile("photo1.jpg"), caption="Забор Жалюзи, г. Тюмень")
-        return ConversationHandler.END
-    elif text == "📞 Контакты":
-        await update.message.reply_text(
-            "г. Тюмень, ул. Примерная, 1\nТел: +7 (3452) 00-00-00\nEmail: info@zabory72.ru\nСайт: https://zabory72.ru\nВремя работы: Пн–Сб с 09:00 до 18:00"
+    if text.startswith("1"):
+        # Показать выбор типа забора
+        keyboard = [[InlineKeyboardButton(f, callback_data=f)] for f in FENCE_TYPES]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Какой тип забора Вас интересует?", reply_markup=reply_markup)
+        return SELECT_FENCE_TYPE
+    elif text.startswith("2"):
+        await update.message.reply_text("Для расчёта стоимости, пожалуйста, выберите тип забора первым через пункт 'Выбрать тип забора'.")
+        return MAIN_MENU
+    elif text.startswith("3"):
+        await update.message.reply_text("Пожалуйста, отправьте заявку на замер в формате:\nИмя, Телефон, Адрес, Удобное время (если есть).")
+        return WAITING_CONTACT
+    elif text.startswith("4"):
+        await update.message.reply_text("Вот примеры наших работ:\n(здесь можно добавить отправку фото)")
+        return MAIN_MENU
+    elif text.startswith("5"):
+        await update.message.reply_text("Напишите ваш вопрос специалисту.")
+        return QUESTION_SPECIALIST
+    elif text.startswith("6"):
+        contacts = (
+            "Адрес: г. Тюмень, ул. Примерная, 1\n"
+            "Телефон: +7 (3452) 00-00-00\n"
+            "Email: info@zabory72.ru\n"
+            "Сайт: https://zabory72.ru\n"
+            "Время работы: Пн–Сб с 09:00 до 18:00"
         )
-        return ConversationHandler.END
+        await update.message.reply_text(contacts)
+        return MAIN_MENU
     else:
-        await update.message.reply_text("Пожалуйста, выберите пункт из меню.")
-        return ConversationHandler.END
+        await update.message.reply_text("Пожалуйста, выберите пункт меню.")
+        return MAIN_MENU
 
-# Заявка на замер
-user_data = {}
+# Пользователь выбрал тип забора
+async def fence_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    selected_fence = query.data
+    context.user_data['selected_fence'] = selected_fence
 
-async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data['name'] = update.message.text
-    await update.message.reply_text("Введите ваш телефон:")
-    return 2
-
-async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data['phone'] = update.message.text
-    await update.message.reply_text("Введите адрес:")
-    return 3
-
-async def get_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data['address'] = update.message.text
-    await update.message.reply_text("Удобное время (необязательно):")
-    return 4
-
-async def get_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data['time'] = update.message.text
-    message = f"📥 Новая заявка на замер\n👤 ID: {update.message.from_user.id}\nИмя: {user_data['name']}\nТелефон: {user_data['phone']}\nАдрес: {user_data['address']}\nВремя: {user_data['time']}"
-    await context.bot.send_message(chat_id=TG_ADMIN_ID, text=message)
-    await update.message.reply_text("Спасибо! Мы свяжемся с вами в ближайшее время.")
-    return ConversationHandler.END
-
-# Вопрос специалисту
-async def get_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user
-    question = update.message.text
-    message = f"📥 Вопрос от пользователя @{user.username if user.username else user.id}:\n{question}"
-    await context.bot.send_message(chat_id=TG_ADMIN_ID, text=message)
-    await update.message.reply_text("Спасибо! Специалист ответит вам в ближайшее время.")
-    return ConversationHandler.END
-
-# Выбор типа забора
-async def fence_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    fence = update.message.text
-    await update.message.reply_text(f"Отлично! Вы выбрали: {fence}. Хотите узнать подробнее или сразу рассчитать стоимость?",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("Подробнее", callback_data="details"), InlineKeyboardButton("Рассчитать стоимость", callback_data="calc")]
-        ])
+    keyboard = [
+        [InlineKeyboardButton("Подробнее", callback_data="detail")],
+        [InlineKeyboardButton("Рассчитать стоимость", callback_data="calc")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(
+        f"Вы выбрали: {selected_fence}\nОтлично! Хотите узнать подробнее и сразу рассчитать стоимость?",
+        reply_markup=reply_markup
     )
-    return ConversationHandler.END
+    return DETAIL_OR_PRICE
 
-# Расчёт стоимости
-calc_data = {}
+# Обработка выбора Подробнее / Рассчитать / Назад
+async def detail_or_calc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    action = query.data
+    selected_fence = context.user_data.get('selected_fence')
 
-async def get_length(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if action == "detail":
+        desc = FENCE_DESCRIPTIONS.get(selected_fence, "Описание отсутствует.")
+        # Можно добавить фото — пока просто текст
+        keyboard = [
+            [InlineKeyboardButton("Рассчитать стоимость", callback_data="calc")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_fence_selection")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f"🔹 {selected_fence}\n\n{desc}\n\nХотите рассчитать стоимость?", reply_markup=reply_markup)
+        return DETAIL_OR_PRICE
+
+    elif action == "calc":
+        await query.edit_message_text("Введите протяжённость забора в метрах (число):")
+        return CALC_LENGTH
+
+    elif action == "back_to_menu":
+        keyboard = [
+            ["1. Выбрать тип забора"],
+            ["2. Рассчитать стоимость"],
+            ["3. Оставить заявку на бесплатный замер"],
+            ["4. Посмотреть примеры наших работ"],
+            ["5. Задать вопрос специалисту"],
+            ["6. Контакты"]
+        ]
+        await query.edit_message_text(
+            "Выберите пункт меню:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        )
+        return MAIN_MENU
+
+    elif action == "back_to_fence_selection":
+        keyboard = [[InlineKeyboardButton(f, callback_data=f)] for f in FENCE_TYPES]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Какой тип забора Вас интересует?", reply_markup=reply_markup)
+        return SELECT_FENCE_TYPE
+
+# Ввод длины забора
+async def calc_length(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
     try:
-        calc_data['length'] = float(update.message.text)
-        await update.message.reply_text("Введите высоту забора (1.8 или 2.0):")
-        return 31
+        length = float(text.replace(',', '.'))
+        if length <= 0:
+            raise ValueError
+        context.user_data['length'] = length
+        # Далее выбираем высоту
+        keyboard = [[InlineKeyboardButton("1.8"), InlineKeyboardButton("2.0")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Выберите высоту забора:", reply_markup=reply_markup)
+        return CALC_HEIGHT
     except ValueError:
-        await update.message.reply_text("Введите число.")
-        return 30
+        await update.message.reply_text("Пожалуйста, введите корректное число для длины забора:")
+        return CALC_LENGTH
 
-async def get_height(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    calc_data['height'] = update.message.text
-    keyboard = [[KeyboardButton(ftype)] for ftype in fence_types]
-    await update.message.reply_text("Выберите тип забора:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-    return 32
+# Выбор высоты забора
+async def calc_height(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    height = query.data
+    if height not in ["1.8", "2.0"]:
+        await query.message.reply_text("Пожалуйста, выберите высоту из вариантов.")
+        return CALC_HEIGHT
+    context.user_data['height'] = height
+    # Выбираем ворота/калитку
+    keyboard = [
+        [InlineKeyboardButton("Ворота", callback_data="Ворота")],
+        [InlineKeyboardButton("Калитка", callback_data="Калитка")],
+        [InlineKeyboardButton("Оба", callback_data="Оба")],
+        [InlineKeyboardButton("Не нужно", callback_data="Не нужно")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text("Нужны ли ворота или калитка?", reply_markup=reply_markup)
+    return CALC_GATE
 
-async def get_fence_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    calc_data['type'] = update.message.text
-    await update.message.reply_text("Нужны ли ворота или калитка? (Ворота, Калитка, Оба, Не нужно):")
-    return 33
+# Выбор ворот/калитки
+async def calc_gate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    gate_choice = query.data
+    context.user_data['gate'] = gate_choice
 
-async def get_extras(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    calc_data['extra'] = update.message.text
-    base_price = price_table.get(calc_data['type'], {}).get(calc_data['height'], 0)
-    total = base_price * calc_data['length']
-    if calc_data['extra'] == "Ворота":
-        total += 20000
-    elif calc_data['extra'] == "Калитка":
-        total += 10000
-    elif calc_data['extra'] == "Оба":
-        total += 30000
-    await update.message.reply_text(f"Примерная стоимость: {int(total)} руб.\nВведите ваше имя для точного расчёта:")
-    return 34
+    fence = context.user_data['selected_fence']
+    length = context.user_data['length']
+    height = context.user_data['height']
 
-async def get_contact_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    name = update.message.text
-    await update.message.reply_text("Введите ваш телефон:")
-    return 35
+    # Рассчёт цены
+    if fence in PRICES and height in PRICES[fence]:
+        price_per_meter = PRICES[fence][height]
+        fence_price = price_per_meter * length
+    else:
+        fence_price = None  # Цена по запросу
 
-async def get_contact_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    phone = update.message.text
-    message = f"📥 Расчёт стоимости\n👤 ID: {update.message.from_user.id}\nТип: {calc_data['type']}\nДлина: {calc_data['length']} м\nВысота: {calc_data['height']}\nДополнительно: {calc_data['extra']}\nТелефон: {phone}"
-    await context.bot.send_message(chat_id=TG_ADMIN_ID, text=message)
-    await update.message.reply_text("Спасибо! Мы свяжемся с вами для точного расчёта.")
+    gate_price = GATE_PRICES.get(gate_choice, 0)
+
+    if fence_price is None:
+        price_text = "Стоимость рассчитывается индивидуально. Свяжитесь с нами для точного расчёта."
+    else:
+        total = fence_price + gate_price
+        price_text = (
+            f"Предварительный расчёт:\n"
+            f"{fence}, высота {height} м, длина {length} м = {fence_price:,.0f} ₽\n"
+            f"Ворота/Калитка: {gate_price:,.0f} ₽\n"
+            f"Итого: {total:,.0f} ₽"
+        )
+    keyboard = [[InlineKeyboardButton("Оставить заявку на замер", callback_data="leave_request")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_detail")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(price_text + "\n\nХотите оставить заявку на бесплатный замер?", reply_markup=reply_markup)
+    return CONTACTS
+
+# Возврат в подробности
+async def back_to_detail(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    fence = context.user_data.get('selected_fence')
+    desc = FENCE_DESCRIPTIONS.get(fence, "Описание отсутствует.")
+    keyboard = [
+        [InlineKeyboardButton("Рассчитать стоимость", callback_data="calc")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_fence_selection")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(f"🔹 {fence}\n\n{desc}\n\nХотите рассчитать стоимость?", reply_markup=reply_markup)
+    return DETAIL_OR_PRICE
+
+# Запрос контактов для заявки
+async def leave_request_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Пожалуйста, напишите ваше имя и телефон для связи:")
+    return WAITING_CONTACT
+
+# Получение контактов и отправка админу
+async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    user = update.message.from_user
+
+    fence = context.user_data.get('selected_fence', 'не указан')
+    length = context.user_data.get('length', 'не указан')
+    height = context.user_data.get('height', 'не указан')
+    gate = context.user_data.get('gate', 'не указан')
+
+    msg_to_admin = (
+        f"Новая заявка от @{user.username} (id={user.id}):\n"
+        f"Тип забора: {fence}\n"
+        f"Длина: {length}\n"
+        f"Высота: {height}\n"
+        f"Ворота/Калитка: {gate}\n"
+        f"Контакты: {text}"
+    )
+    await update.message.reply_text("Спасибо! Ваша заявка отправлена, с вами свяжутся в ближайшее время.", reply_markup=ReplyKeyboardRemove())
+
+    await context.bot.send_message(TG_ADMIN_ID, msg_to_admin)
     return ConversationHandler.END
 
-if __name__ == '__main__':
+# Обработка вопроса специалисту
+async def question_specialist(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    user = update.message.from_user
+    msg = f"Вопрос от @{user.username} (id={user.id}):\n\n{text}"
+    await context.bot.send_message(TG_ADMIN_ID, msg)
+    await update.message.reply_text("Спасибо за вопрос! Наш специалист скоро ответит.")
+    return ConversationHandler.END
+
+# Отмена
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Отмена. Чтобы начать заново, отправьте /start", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
+
+# Основной запуск приложения
+def main():
     app = ApplicationBuilder().token("7853853505:AAEhTPDeWUlX67naGu5JhW9-maep1yesUD0").build()
 
     conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)],
+        entry_points=[CommandHandler('start', start)],
         states={
-            1: [MessageHandler(filters.TEXT, get_name)],
-            2: [MessageHandler(filters.TEXT, get_phone)],
-            3: [MessageHandler(filters.TEXT, get_address)],
-            4: [MessageHandler(filters.TEXT, get_time)],
-            10: [MessageHandler(filters.TEXT, get_question)],
-            20: [MessageHandler(filters.TEXT, fence_choice)],
-            30: [MessageHandler(filters.TEXT, get_length)],
-            31: [MessageHandler(filters.TEXT, get_height)],
-            32: [MessageHandler(filters.TEXT, get_fence_type)],
-            33: [MessageHandler(filters.TEXT, get_extras)],
-            34: [MessageHandler(filters.TEXT, get_contact_name)],
-            35: [MessageHandler(filters.TEXT, get_contact_phone)],
+            MAIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, main_menu_handler)],
+            SELECT_FENCE_TYPE: [CallbackQueryHandler(fence_type_chosen)],
+            DETAIL_OR_PRICE: [CallbackQueryHandler(detail_or_calc_handler, pattern="^(detail|calc|back_to_menu|back_to_fence_selection)$")],
+            CALC_LENGTH: [MessageHandler(filters.TEXT & ~filters.COMMAND, calc_length)],
+            CALC_HEIGHT: [CallbackQueryHandler(calc_height)],
+            CALC_GATE: [CallbackQueryHandler(calc_gate)],
+            CONTACTS: [CallbackQueryHandler(leave_request_handler, pattern="^leave_request$"),
+                       CallbackQueryHandler(back_to_detail, pattern="^back_to_detail$")],
+            WAITING_CONTACT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_contact)],
+            QUESTION_SPECIALIST: [MessageHandler(filters.TEXT & ~filters.COMMAND, question_specialist)]
         },
-        fallbacks=[]
+        fallbacks=[CommandHandler('cancel', cancel)],
+        allow_reentry=True
     )
 
-    app.add_handler(CommandHandler("start", start))
     app.add_handler(conv_handler)
     app.run_polling()
+
+if __name__ == '__main__':
+    main()
+
 
 
 
