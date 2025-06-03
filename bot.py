@@ -1,203 +1,295 @@
 import logging
-import sqlite3
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ContextTypes, filters
-)
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputFile
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, ConversationHandler, filters
 
-# Настройки
-API_TOKEN = "7853853505:AAEhTPDeWUlX67naGu5JhW9-maep1yesUD0"
-ADMIN_CHAT_ID = 1346038165  # Замените на ваш Telegram ID
-DB_NAME = "users.db"
+logging.basicConfig(level=logging.INFO)
 
-# Логирование
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+TG_ADMIN_ID = import logging
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputFile
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, ConversationHandler, filters
 
-# БД
-def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT,
-            fence_type TEXT,
-            area TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
+logging.basicConfig(level=logging.INFO)
 
-def save_user_data(user_id, username, fence_type=None, area=None):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO users (user_id, username, fence_type, area)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-            username=excluded.username,
-            fence_type=COALESCE(excluded.fence_type, users.fence_type),
-            area=COALESCE(excluded.area, users.area)
-    """, (user_id, username, fence_type, area))
-    conn.commit()
-    conn.close()
+TG_ADMIN_ID = import logging
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InputFile
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, ConversationHandler, filters
 
-def get_user_fence_type(user_id):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("SELECT fence_type FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return row[0] if row else None
+logging.basicConfig(level=logging.INFO)
 
-# Меню
-def main_menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("1. Выбрать тип забора", callback_data="choose_fence")],
-        [InlineKeyboardButton("2. Рассчитать стоимость", callback_data="calc_cost")],
-        [InlineKeyboardButton("3. Бесплатный замер", callback_data="free_measure")],
-        [InlineKeyboardButton("4. Примеры работ", callback_data="examples")],
-        [InlineKeyboardButton("5. Вопрос специалисту", callback_data="ask_expert")],
-        [InlineKeyboardButton("6. Контакты", callback_data="contacts")],
-    ])
+TG_ADMIN_ID = 123456789  # Замените на реальный Telegram ID администратора
 
-FENCE_TYPES = {
-    "fence_1": ("Забор из профнастила", 3474, 3650),
-    "fence_2": ("Профлист в рамке", 6140, 6500),
-    "fence_3": ("Евроштакетник вертикально", 7620, 8260),
-    "fence_4": ("Евроштакетник горизонтально", 9650, 10350),
-    "fence_5": ("Жалюзи", 8700, None),
-    "fence_6": ("Ранчо двойной", 14500, None),
-    "fence_6b": ("Ранчо одинарной ламели", 11000, None),
-    "fence_7": ("3Д сетка", 3100, None),
-    "fence_8": ("Откатные ворота", 87000, 87000),
-    "fence_9": ("Распашные ворота + калитка", 37000, 37000),
-    "fence_10": ("Навесы", "от 7500 руб./м²", "")
-}
+menu_buttons = [[
+    "🔩 Выбрать тип забора",
+    "💰 Рассчитать стоимость"
+], [
+    "📐 Оставить заявку на бесплатный замер",
+    "🖼 Посмотреть примеры работ"
+], [
+    "❓ Задать вопрос специалисту",
+    "📞 Контакты"
+]]
 
-def fence_menu():
-    keyboard = []
-    for i, (key, value) in enumerate(FENCE_TYPES.items(), start=1):
-        keyboard.append([InlineKeyboardButton(f"{i}. {value[0]}", callback_data=key)])
-    return InlineKeyboardMarkup(keyboard)
-
-# Команды
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    save_user_data(user.id, user.username)
-    await update.message.reply_text("Добро пожаловать!", reply_markup=main_menu())
+    await update.message.reply_text(
+        "Здравствуйте! Вы обратились в компанию Zabory72.ru — супермаркет металлических заборов под ключ...",
+        reply_markup=ReplyKeyboardMarkup(menu_buttons, resize_keyboard=True)
+    )
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    user = query.from_user
-
-    if data == "choose_fence":
-        await query.edit_message_text("Какой тип забора вас интересует?", reply_markup=fence_menu())
-
-    elif data.startswith("fence_"):
-        fence_name = FENCE_TYPES[data][0]
-        save_user_data(user.id, user.username, fence_type=fence_name)
-        await query.edit_message_text(
-            f"Вы выбрали: {fence_name}. Хотите узнать подробнее и рассчитать стоимость?",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Подробнее", callback_data="details")],
-                [InlineKeyboardButton("На главную", callback_data="menu")]
-            ])
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if text == "📐 Оставить заявку на бесплатный замер":
+        await update.message.reply_text("Введите ваше имя:")
+        return 1
+    elif text == "❓ Задать вопрос специалисту":
+        await update.message.reply_text("Пожалуйста, напишите ваш вопрос:")
+        return 10
+    elif text == "🖼 Посмотреть примеры работ":
+        await update.message.reply_photo(photo=InputFile("photo1.jpg"), caption="Забор Жалюзи, г. Тюмень")
+        return ConversationHandler.END
+    elif text == "📞 Контакты":
+        await update.message.reply_text(
+            "г. Тюмень, ул. Примерная, 1\nТел: +7 (3452) 00-00-00\nEmail: info@zabory72.ru\nВремя работы: Пн–Сб с 09:00 до 18:00"
         )
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text("Пожалуйста, выберите пункт из меню.")
+        return ConversationHandler.END
 
-    elif data == "details":
-        fence = get_user_fence_type(user.id)
-        cost = next((v for v in FENCE_TYPES.values() if v[0] == fence), None)
-        if cost:
-            if isinstance(cost[1], int):
-                text = f"{fence}\nСтоимость при h=1.8м: {cost[1]} руб.\nСтоимость при h=2.0м: {cost[2]} руб."
-            else:
-                text = f"{fence}: {cost[1]}"
-            await query.edit_message_text(text, reply_markup=main_menu())
+# Заявка на замер
+user_data = {}
 
-    elif data == "calc_cost":
-        await query.edit_message_text("Введите площадь участка в м²:")
-        context.user_data['awaiting_area'] = True
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['name'] = update.message.text
+    await update.message.reply_text("Введите ваш телефон:")
+    return 2
 
-    elif data == "free_measure":
-        await query.edit_message_text("Чтобы заказать бесплатный замер, отправьте ваш адрес и телефон.")
+async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['phone'] = update.message.text
+    await update.message.reply_text("Введите адрес:")
+    return 3
 
-    elif data == "examples":
-        media = [
-            InputMediaPhoto(media="https://via.placeholder.com/300x200.png?text=Работа+1"),
-            InputMediaPhoto(media="https://via.placeholder.com/300x200.png?text=Работа+2")
-        ]
-        await context.bot.send_media_group(chat_id=update.effective_chat.id, media=media)
+async def get_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['address'] = update.message.text
+    await update.message.reply_text("Удобное время (необязательно):")
+    return 4
 
-    elif data == "ask_expert":
-        await query.edit_message_text("Задайте свой вопрос, и специалист скоро ответит вам.")
+async def get_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['time'] = update.message.text
+    message = f"📥 Новая заявка на замер\nИмя: {user_data['name']}\nТелефон: {user_data['phone']}\nАдрес: {user_data['address']}\nВремя: {user_data['time']}"
+    await context.bot.send_message(chat_id=TG_ADMIN_ID, text=message)
+    await update.message.reply_text("Спасибо! Мы свяжемся с вами в ближайшее время.")
+    return ConversationHandler.END
 
-    elif data == "contacts":
-        await query.edit_message_text("📞 +7 (900) 000-00-00\n🌐 https://zabory.ru\n📍 Москва")
-
-    elif data == "menu":
-        await query.edit_message_text("Вы в главном меню", reply_markup=main_menu())
-
-async def handle_area(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get('awaiting_area'):
-        try:
-            area = float(update.message.text)
-            user = update.effective_user
-            fence = get_user_fence_type(user.id)
-            cost = next((v for v in FENCE_TYPES.values() if v[0] == fence), None)
-            unit_price = cost[1] if isinstance(cost[1], int) else 0
-            total = unit_price * area
-            msg = f"Тип забора: {fence}\nПлощадь: {area} м²\nПриблизительная стоимость: {total:.2f} руб."
-            await update.message.reply_text(msg)
-            await context.bot.send_message(ADMIN_CHAT_ID, f"📬 Заявка от @{user.username}:\n{msg}")
-            save_user_data(user.id, user.username, area=str(area))
-        except ValueError:
-            await update.message.reply_text("Пожалуйста, введите число.")
-        finally:
-            context.user_data['awaiting_area'] = False
-
-# Основной запуск
-async def main():
-    init_db()
-    app = ApplicationBuilder().token(API_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_area))
-
-    await app.initialize()
-    await app.start()
-    logger.info("Bot started...")
-    await app.updater.start_polling()
-    await app.updater.idle()
-    await app.stop()
-    await app.shutdown()
+# Вопрос специалисту
+async def get_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    question = update.message.text
+    message = f"📥 Вопрос от пользователя @{user.username if user.username else user.id}:\n{question}"
+    await context.bot.send_message(chat_id=TG_ADMIN_ID, text=message)
+    await update.message.reply_text("Спасибо! Специалист ответит вам в ближайшее время.")
+    return ConversationHandler.END
 
 if __name__ == '__main__':
-    import asyncio
-    import nest_asyncio
+    app = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
 
-    nest_asyncio.apply()
+    conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)],
+        states={
+            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            2: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
+            3: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_address)],
+            4: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_time)],
+            10: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_question)],
+        },
+        fallbacks=[]
+    )
 
-    async def run():
-        init_db()
-        app = ApplicationBuilder().token(API_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(conv_handler)
+    app.run_polling()
+  # Замените на реальный Telegram ID администратора
 
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CallbackQueryHandler(button_handler))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_area))
+menu_buttons = [[
+    "🔩 Выбрать тип забора",
+    "💰 Рассчитать стоимость"
+], [
+    "📐 Оставить заявку на бесплатный замер",
+    "🖼 Посмотреть примеры работ"
+], [
+    "❓ Задать вопрос специалисту",
+    "📞 Контакты"
+]]
 
-        logger.info("Bot started...")
-        await app.run_polling()
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Здравствуйте! Вы обратились в компанию Zabory72.ru — супермаркет металлических заборов под ключ...",
+        reply_markup=ReplyKeyboardMarkup(menu_buttons, resize_keyboard=True)
+    )
 
-    asyncio.run(run())
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if text == "📐 Оставить заявку на бесплатный замер":
+        await update.message.reply_text("Введите ваше имя:")
+        return 1
+    elif text == "❓ Задать вопрос специалисту":
+        await update.message.reply_text("Пожалуйста, напишите ваш вопрос:")
+        return 10
+    elif text == "🖼 Посмотреть примеры работ":
+        await update.message.reply_photo(photo=InputFile("photo1.jpg"), caption="Забор Жалюзи, г. Тюмень")
+        return ConversationHandler.END
+    elif text == "📞 Контакты":
+        await update.message.reply_text(
+            "г. Тюмень, ул. Примерная, 1\nТел: +7 (3452) 00-00-00\nEmail: info@zabory72.ru\nВремя работы: Пн–Сб с 09:00 до 18:00"
+        )
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text("Пожалуйста, выберите пункт из меню.")
+        return ConversationHandler.END
+
+# Заявка на замер
+user_data = {}
+
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['name'] = update.message.text
+    await update.message.reply_text("Введите ваш телефон:")
+    return 2
+
+async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['phone'] = update.message.text
+    await update.message.reply_text("Введите адрес:")
+    return 3
+
+async def get_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['address'] = update.message.text
+    await update.message.reply_text("Удобное время (необязательно):")
+    return 4
+
+async def get_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['time'] = update.message.text
+    message = f"📥 Новая заявка на замер\nИмя: {user_data['name']}\nТелефон: {user_data['phone']}\nАдрес: {user_data['address']}\nВремя: {user_data['time']}"
+    await context.bot.send_message(chat_id=TG_ADMIN_ID, text=message)
+    await update.message.reply_text("Спасибо! Мы свяжемся с вами в ближайшее время.")
+    return ConversationHandler.END
+
+# Вопрос специалисту
+async def get_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    question = update.message.text
+    message = f"📥 Вопрос от пользователя @{user.username if user.username else user.id}:\n{question}"
+    await context.bot.send_message(chat_id=TG_ADMIN_ID, text=message)
+    await update.message.reply_text("Спасибо! Специалист ответит вам в ближайшее время.")
+    return ConversationHandler.END
+
+if __name__ == '__main__':
+    app = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)],
+        states={
+            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            2: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
+            3: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_address)],
+            4: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_time)],
+            10: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_question)],
+        },
+        fallbacks=[]
+    )
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(conv_handler)
+    app.run_polling()
+  # Замените на реальный Telegram ID администратора
+
+menu_buttons = [[
+    "🔩 Выбрать тип забора",
+    "💰 Рассчитать стоимость"
+], [
+    "📐 Оставить заявку на бесплатный замер",
+    "🖼 Посмотреть примеры работ"
+], [
+    "❓ Задать вопрос специалисту",
+    "📞 Контакты"
+]]
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Здравствуйте! Вы обратились в компанию Zabory72.ru — супермаркет металлических заборов под ключ...",
+        reply_markup=ReplyKeyboardMarkup(menu_buttons, resize_keyboard=True)
+    )
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if text == "📐 Оставить заявку на бесплатный замер":
+        await update.message.reply_text("Введите ваше имя:")
+        return 1
+    elif text == "❓ Задать вопрос специалисту":
+        await update.message.reply_text("Пожалуйста, напишите ваш вопрос:")
+        return 10
+    elif text == "🖼 Посмотреть примеры работ":
+        await update.message.reply_photo(photo=InputFile("photo1.jpg"), caption="Забор Жалюзи, г. Тюмень")
+        return ConversationHandler.END
+    elif text == "📞 Контакты":
+        await update.message.reply_text(
+            "г. Тюмень, ул. Примерная, 1\nТел: +7 (3452) 00-00-00\nEmail: info@zabory72.ru\nВремя работы: Пн–Сб с 09:00 до 18:00"
+        )
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text("Пожалуйста, выберите пункт из меню.")
+        return ConversationHandler.END
+
+# Заявка на замер
+user_data = {}
+
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['name'] = update.message.text
+    await update.message.reply_text("Введите ваш телефон:")
+    return 2
+
+async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['phone'] = update.message.text
+    await update.message.reply_text("Введите адрес:")
+    return 3
+
+async def get_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['address'] = update.message.text
+    await update.message.reply_text("Удобное время (необязательно):")
+    return 4
+
+async def get_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data['time'] = update.message.text
+    message = f"📥 Новая заявка на замер\nИмя: {user_data['name']}\nТелефон: {user_data['phone']}\nАдрес: {user_data['address']}\nВремя: {user_data['time']}"
+    await context.bot.send_message(chat_id=TG_ADMIN_ID, text=message)
+    await update.message.reply_text("Спасибо! Мы свяжемся с вами в ближайшее время.")
+    return ConversationHandler.END
+
+# Вопрос специалисту
+async def get_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    question = update.message.text
+    message = f"📥 Вопрос от пользователя @{user.username if user.username else user.id}:\n{question}"
+    await context.bot.send_message(chat_id=TG_ADMIN_ID, text=message)
+    await update.message.reply_text("Спасибо! Специалист ответит вам в ближайшее время.")
+    return ConversationHandler.END
+
+if __name__ == '__main__':
+    app = ApplicationBuilder().token("7853853505:AAEhTPDeWUlX67naGu5JhW9-maep1yesUD0").build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)],
+        states={
+            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            2: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
+            3: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_address)],
+            4: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_time)],
+            10: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_question)],
+        },
+        fallbacks=[]
+    )
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(conv_handler)
+    app.run_polling()
+
 
 
 
