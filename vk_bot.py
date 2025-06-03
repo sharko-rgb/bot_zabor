@@ -6,11 +6,12 @@ import database
 from telegram import Bot
 import asyncio
 
-# Инициализация БД
 database.init_db()
 
 vk = vk_api.VkApi(token=config.VK_TOKEN)
 longpoll = VkLongPoll(vk)
+
+pending_addresses = {}
 
 def send_message(user_id, message, keyboard=None):
     vk.method("messages.send", {
@@ -20,7 +21,6 @@ def send_message(user_id, message, keyboard=None):
         "keyboard": keyboard
     })
 
-# Главное меню VK
 keyboard = VkKeyboard(one_time=False)
 keyboard.add_button("🔩 Тип забора", color=VkKeyboardColor.PRIMARY)
 keyboard.add_button("💰 Расчёт стоимости", color=VkKeyboardColor.POSITIVE)
@@ -30,6 +30,8 @@ keyboard.add_button("📞 Контакты", color=VkKeyboardColor.NEGATIVE)
 
 async def notify_telegram_admin(user_id, request_type, data):
     user = database.get_user(user_id)
+    if not user:
+        return
     bot = Bot(token=config.TELEGRAM_TOKEN)
     vk_link = f"vk.com/id{user[2]}"
     message = (
@@ -53,9 +55,14 @@ for event in longpoll.listen():
             send_message(user_id, "Здравствуйте! Чем помочь?", keyboard.get_keyboard())
         
         elif text == "📐 заявка на замер":
+            pending_addresses[user_id] = True
             send_message(user_id, "Введите адрес для замера:")
-            # Здесь можно добавить логику сбора данных, как в Telegram
-            address = "..."  # Получаем из следующего сообщения
+
+        elif pending_addresses.get(user_id):
+            address = event.text
             database.save_request(user_id, "замер", f"Адрес: {address}")
             send_message(user_id, "✅ Заявка принята!")
+            # Запускаем асинхронно уведомление админу Telegram
             asyncio.run(notify_telegram_admin(user_id, "замер", f"Адрес: {address}"))
+            del pending_addresses[user_id]
+
