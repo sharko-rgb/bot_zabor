@@ -1,5 +1,4 @@
 import sqlite3
-from datetime import datetime
 
 def init_db():
     conn = sqlite3.connect('zabory72.db')
@@ -9,7 +8,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         platform TEXT,
-        user_id INTEGER,
+        user_id INTEGER UNIQUE,
         username TEXT,
         full_name TEXT
     )
@@ -28,6 +27,8 @@ def init_db():
     conn.close()
 
 def save_user(platform, user_id, username, full_name):
+    if get_user(user_id) is not None:
+        return
     conn = sqlite3.connect('zabory72.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO users (platform, user_id, username, full_name) VALUES (?, ?, ?, ?)',
@@ -50,3 +51,4 @@ def get_user(user_id):
     user = cursor.fetchone()
     conn.close()
     return user
+
